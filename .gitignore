@@ -1,0 +1,9 @@
+/venv/
+/test/
+/build/
+/dist/
+/recovery/
+*.spec
+*.xlsx#
+/manuscript/
+.idea/

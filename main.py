@@ -1,4 +1,3 @@
-import configparser
 import sys
 import os
 import datetime
@@ -7,6 +6,7 @@ import pandas as pd
 import rstr
 import random
 import subprocess
+import shutil
 
 from PyQt6.QtCore import Qt, QDateTime
 from PyQt6.QtWidgets import QApplication
@@ -33,7 +33,6 @@ class Window(QMainWindow):
         super().__init__(parent)
         self.recovery_path = os.getcwd() + os.path.sep + "recovery"
         os.makedirs(self.recovery_path) if not os.path.exists(self.recovery_path) else None  # creates recovery folder
-
         self.site = "Marburg"
         self.alloc = [1 if i % 2 == 0 else -1 for i in range(6)]  # allocates the first subjects randomly
         self.file_label = QLabel()
@@ -129,9 +128,25 @@ class Window(QMainWindow):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
 
+    def create_backup(self):
+        """this is an additional backup feature in case the template is chosen, so that no data is lost"""
+
+        workbook = load_workbook(os.path.join(os.getcwd(), "randomisation{}.xlsx".format(self.site)))
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        workbook.save(os.path.join(self.recovery_path, current_date + 'randomisation{}.xlsx'.format(self.site)))
+
     def _selectFile(self):
         self.excel_file = QFileDialog.getOpenFileName(self, 'Exceltabelle auswählen',
                                                       filter='Excel files (*.xls *.xlsx)', directory=os.getcwd())[0]
+        if self.excel_file == os.path.join(os.getcwd(), 'template.xlsx'):
+            try:
+                self.create_backup()
+            except FileNotFoundError:
+                print('No file to backup, creating new xlsx-file')
+
+            shutil.copyfile(os.path.join(os.getcwd(), 'template.xlsx'), "randomisation{}.xlsx".format(self.site))
+            self.excel_file = os.path.join(os.getcwd(), "randomisation{}.xlsx".format(self.site))
+
         with open(os.getcwd() + os.path.sep + 'config.ini', 'w') as config_file:
             config_file.write(self.excel_file)
         self.file_label.setText('Ausgewählte Datei: ' + str(self.excel_file))
@@ -155,47 +170,57 @@ class Window(QMainWindow):
         """opens the stored data in the standard program"""
         subprocess.check_call(['open', self.excel_file])
 
+    @staticmethod
+    def get_maximum_rows(sheet):
+        """helper function to obtain the last entry in the xlsx-file. Source:
+        https://stackoverflow.com/questions/46569496/openpyxl-max-row-and-max-column-wrongly-reports-a-larger-figure"""
+
+        for i in range(1, 20000):
+            if sheet.cell(row=i, column=2).value is None:
+                max_row = i
+                break
+        return max_row
+
     def addPatient(self):
         """adds the data that was entered in the form into an Excel file that is stored locally. Furthermore,
-        every time the Excel file is read a copy is saved to prevent data loss"""
+        every time the xlsx-file is read a copy is saved to prevent data loss"""
 
         workbook, sheet, df = self.load_excelfile(self)
         # load_workbook(self.excel_file)
         current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         workbook.save(os.path.join(self.recovery_path, current_date+'.recovery.xlsx'))  # recovery save
-        current_patients = sheet.max_row - 1
+        current_patients = self.get_maximum_rows(sheet)
 
         birthday = self.birthday_value.dateTime().toPyDateTime()
         age = (datetime.datetime.now() - birthday) / datetime.timedelta(days=365.25)
-        dialog_response = self._showDialog(current_patients + 1)
+        dialog_response = self._showDialog(current_patients-1)
 
-        if current_patients > 5:
+        if current_patients > 7:
             bt, fim_total = self.initialise_randomisation(df)
 
         if dialog_response == QMessageBox.StandardButton.Ok:
-            sheet["A" + str(current_patients + 2)] = self.name_value.text()
-            sheet["B" + str(current_patients + 2)] = self.surname_value.text()
-            sheet["C" + str(current_patients + 2)] = self.create_pseudonym(8)
+            sheet["A" + str(current_patients)] = self.name_value.text()
+            sheet["B" + str(current_patients)] = self.surname_value.text()
+            sheet["C" + str(current_patients)] = self.create_pseudonym(8)
             sheet[
-                "D" + str(current_patients + 2)
+                "D" + str(current_patients)
                 ] = self.birthday_value.dateTime().toString("dd.MM.yyyy")
-            sheet["E" + str(current_patients + 2)] = age
-            sheet["F" + str(current_patients + 2)] = float(self.bdi_value.text())
-            sheet["G" + str(current_patients + 2)] = float(self.hy_value.text())
-            sheet["H" + str(current_patients + 2)] = float(self.pdq8_value.text())
-            if current_patients+2 < 8:
-                sheet["I" + str(current_patients + 2)] = self.alloc[current_patients]
+            sheet["E" + str(current_patients)] = age
+            sheet["F" + str(current_patients)] = float(self.bdi_value.text())
+            sheet["G" + str(current_patients)] = float(self.hy_value.text())
+            sheet["H" + str(current_patients)] = float(self.pdq8_value.text())
+            if current_patients < 8:
+                sheet["I" + str(current_patients)] = self.alloc[current_patients-2]
             else:
                 df_temp = pd.DataFrame({'intercept': [1],
                                         'bdi': [float(self.bdi_value.text())],
                                         'hy': [float(self.hy_value.text())],
                                         'pdq8': [float(self.pdq8_value.text())]})
                 alloc_temp = self.patient_allocation(df_patient=df_temp, bt=bt, fim_total=fim_total)
-                sheet["I" + str(current_patients + 2)] = alloc_temp
+                sheet["I" + str(current_patients)] = alloc_temp
 
             workbook.save(self.excel_file)
             self.clearForm()
-
         else:
             return
 
@@ -273,7 +298,7 @@ class Window(QMainWindow):
 
         return bt, fim_total
 
-    def patient_allocation(self, df_patient: pd.DataFrame, bt: int, fim_total: int, npat_first: int = 6, nv: int = 4):
+    def patient_allocation(self, df_patient: pd.DataFrame, bt: int, fim_total: int, nv: int = 4):
         """This is the core of the allocation/randomisation algorithm proposed in our manuscript. According to two
         distinct rules the subject of interest is allocated into either of the arms. This complex procedure aims at
         balancing both groups according to some predictors that were deemed inportant for quality of life in PD and

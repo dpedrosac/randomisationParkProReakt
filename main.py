@@ -33,7 +33,7 @@ class Window(QMainWindow):
         super().__init__(parent)
         self.recovery_path = os.getcwd() + os.path.sep + "recovery"
         os.makedirs(self.recovery_path) if not os.path.exists(self.recovery_path) else None  # creates recovery folder
-        self.site = "Marburg"
+        self.site = "Hamburg"
         self.alloc = [1 if i % 2 == 0 else -1 for i in range(6)]  # allocates the first subjects randomly
         self.file_label = QLabel()
         self.file_label.setText('Keine Datei bisher ausgewählt')
@@ -168,7 +168,7 @@ class Window(QMainWindow):
 
     def openXLS_file(self):
         """opens the stored data in the standard program"""
-        subprocess.check_call(['open', self.excel_file])
+        subprocess.call(['open', self.excel_file])
 
     @staticmethod
     def get_maximum_rows(sheet):

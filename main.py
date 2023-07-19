@@ -138,6 +138,7 @@ class Window(QMainWindow):
     def _selectFile(self):
         self.excel_file = QFileDialog.getOpenFileName(self, 'Exceltabelle auswählen',
                                                       filter='Excel files (*.xls *.xlsx)', directory=os.getcwd())[0]
+        self.excel_file = os.path.abspath(self.excel_file)
         if self.excel_file == os.path.join(os.getcwd(), 'template.xlsx'):
             try:
                 self.create_backup()
@@ -145,7 +146,7 @@ class Window(QMainWindow):
                 print('No file to backup, creating new xlsx-file')
 
             shutil.copyfile(os.path.join(os.getcwd(), 'template.xlsx'), "randomisation{}.xlsx".format(self.site))
-            self.excel_file = os.path.join(os.getcwd(), "randomisation{}.xlsx".format(self.site))
+            self.excel_file = os.path.abspath(os.path.join(os.getcwd(), "randomisation{}.xlsx".format(self.site)))
 
         with open(os.getcwd() + os.path.sep + 'config.ini', 'w') as config_file:
             config_file.write(self.excel_file)
